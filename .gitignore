@@ -1,0 +1,13 @@
+*.json
+*.csv
+*.jpg
+*.png
+*.ipynb
+*.ckpt
+*.gz
+version*
+*.pt
+*.pth
+*.dat
+MNIST
+*.zip
