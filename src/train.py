@@ -8,8 +8,9 @@ from pathlib import Path
 import numpy as np
 from pytorch_lightning.callbacks import ModelCheckpoint
 from functools import partial
+from torch.utils.data import DataLoader
 
-from dataset import PandaDatasetStack, PandaDatasetConcat
+from dataset import PandaDatasetStack, PandaDatasetConcat, get_transforms
 from metrics import quadratic_kappa, accuracy
 from model import EffNetPatch, EffNetConcat
 from table_logger import TableLogger
@@ -42,7 +43,7 @@ class BaselineModel(pl.LightningModule):
         # log hparams
         self.hparams = {'lr': lr, 'bs':bs, 'patch_size':imsize,
                         'n_patches': n_patches, 'loss_fn': self.loss_fn.__class__.__name__,
-                        'tfms': str(get_transforms(imsize, train=True, local=True))}
+                        'tfms': str(get_transforms(imsize, train=True, local=True, is_stack=is_stack))}
 
     def forward(self, x):
         return self.model(x)
@@ -116,7 +117,9 @@ def set_grad(m, grad):
 
 # TODO: add cli
 if __name__ == '__main__':
-    model = BaselineModel(path, bs=12, lr=1e-3, imsize=224, n_patches=22, reg=True, is_stack=False)
+    path = Path('/path/to/data')
+
+    model = BaselineModel(path, bs=12, lr=1e-3, imsize=64, n_patches=16, reg=True, is_stack=False)
     # model = BaselineModel.load_from_checkpoint('./TableLogger/version_15/epoch=13.ckpt', map_location='cuda:0',
     #                                           path=path, bs=14, imsize=200, lr=1e-3, n_patches=22, reg=True, is_stack=False)
 
@@ -133,7 +136,7 @@ if __name__ == '__main__':
 
     # Train head and batchnorm layers
     model.model.m.apply(partial(set_grad, grad=False))
-    trainer = pl.Trainer(max_epochs=10, precision=16, logger=logger, accumulate_grad_batches=1,
+    trainer = pl.Trainer(max_epochs=10, logger=logger, accumulate_grad_batches=1,
                         checkpoint_callback=checkpoint_callback, train_percent_check=1.0,
                         val_percent_check=1.0, gpus=1, weights_summary='top')
     trainer.fit(model)
@@ -141,7 +144,7 @@ if __name__ == '__main__':
     # Train full network
     model.model.m.apply(partial(set_grad, grad=True))
     model.lr = model.lr/5.
-    trainer = pl.Trainer(max_epochs=50, precision=16, logger=logger, accumulate_grad_batches=1,
+    trainer = pl.Trainer(max_epochs=50, logger=logger, accumulate_grad_batches=1,
                         checkpoint_callback=checkpoint_callback,
                         train_percent_check=1.0, val_percent_check=1.0,
                         gpus=1, weights_summary='top')

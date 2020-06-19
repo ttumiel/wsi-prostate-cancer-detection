@@ -25,8 +25,8 @@ class EffNetPatch(nn.Module):
         self.m.classifier = nn.Identity()
 #         self.head = nn.Sequential(AdaptiveConcatPool2d(),nn.Flatten(),nn.Linear(nc*2,n))
         self.head = nn.Sequential(GeM(),nn.Flatten(),nn.Linear(nc,n))
-       nn.init.kaiming_normal_(self.head[2].weight)
-       nn.init.zeros_(self.head[2].bias)
+        nn.init.kaiming_normal_(self.head[2].weight)
+        nn.init.zeros_(self.head[2].bias)
 
     def forward(self, x):
         bs, *s = x.shape

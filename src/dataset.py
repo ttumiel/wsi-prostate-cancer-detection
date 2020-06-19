@@ -2,7 +2,6 @@ import os
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 import albumentations as albu
 from albumentations.pytorch import ToTensorV2
@@ -102,8 +101,8 @@ class PandaDatasetConcat(torch.utils.data.Dataset):
         self.fold = fold
         self.train = train
         self.path = Path(path)
-        n = math.ceil(math.sqrt(n_patches))
-        self.global_tfms = get_transforms(patch_size*n, train=train, local=False, n_patches=n_patches)
+        self.n = math.ceil(math.sqrt(n_patches))
+        self.global_tfms = get_transforms(patch_size*self.n, train=train, local=False, n_patches=n_patches)
         self.local_tfms = get_transforms(patch_size, train=train, local=True, n_patches=n_patches)
         self.n_patches = n_patches
 
