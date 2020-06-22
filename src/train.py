@@ -33,8 +33,8 @@ class BaselineModel(pl.LightningModule):
             else:
                 self.model = EffNetConcat(n=1, n_patches=n_patches)
             # self.loss_fn = F.mse_loss
-            # self.loss_fn = nn.SmoothL1Loss()
-            self.loss_fn = nn.L1Loss()
+            self.loss_fn = nn.SmoothL1Loss()
+            # self.loss_fn = nn.L1Loss()
         else:
             self.model = EfficientNet.from_pretrained("efficientnet-b0", num_classes=6)
             # self.loss_fn = LabelSmoothingLoss(6, 0.1)
@@ -43,7 +43,8 @@ class BaselineModel(pl.LightningModule):
         # log hparams
         self.hparams = {'lr': lr, 'bs':bs, 'patch_size':imsize,
                         'n_patches': n_patches, 'loss_fn': self.loss_fn.__class__.__name__,
-                        'tfms': str(get_transforms(imsize, train=True, local=True, is_stack=is_stack))}
+                        'tfms': str(get_transforms(imsize, train=True, local=True, is_stack=is_stack)),
+                        'is_stack': is_stack}
 
     def forward(self, x):
         return self.model(x)
@@ -119,7 +120,7 @@ def set_grad(m, grad):
 if __name__ == '__main__':
     path = Path('/path/to/data')
 
-    model = BaselineModel(path, bs=12, lr=1e-3, imsize=64, n_patches=16, reg=True, is_stack=False)
+    model = BaselineModel(path, bs=14, lr=3e-4, imsize=128, n_patches=64, reg=True, is_stack=False)
     # model = BaselineModel.load_from_checkpoint('./TableLogger/version_15/epoch=13.ckpt', map_location='cuda:0',
     #                                           path=path, bs=14, imsize=200, lr=1e-3, n_patches=22, reg=True, is_stack=False)
 
@@ -136,9 +137,9 @@ if __name__ == '__main__':
 
     # Train head and batchnorm layers
     model.model.m.apply(partial(set_grad, grad=False))
-    trainer = pl.Trainer(max_epochs=10, logger=logger, accumulate_grad_batches=1,
+    trainer = pl.Trainer(max_epochs=5, logger=logger, accumulate_grad_batches=1,
                         checkpoint_callback=checkpoint_callback, train_percent_check=1.0,
-                        val_percent_check=1.0, gpus=1, weights_summary='top')
+                        val_percent_check=1.0, gpus=1, weights_summary='top', precision=16)
     trainer.fit(model)
 
     # Train full network
@@ -147,7 +148,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer(max_epochs=50, logger=logger, accumulate_grad_batches=1,
                         checkpoint_callback=checkpoint_callback,
                         train_percent_check=1.0, val_percent_check=1.0,
-                        gpus=1, weights_summary='top')
+                        gpus=1, weights_summary='top', precision=16)
     trainer.fit(model)
 
     # Save final checkpoint

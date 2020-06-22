@@ -6,7 +6,7 @@ import torchvision.transforms as transforms
 import albumentations as albu
 from albumentations.pytorch import ToTensorV2
 import cv2
-import re, math
+import re, math, random
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
 from functools import partial
@@ -38,14 +38,14 @@ def get_transforms(imsize, train=True, local=True, n_patches=None, is_stack=Fals
                 albu.RandomContrast(p=0.2, limit=0.15),
                 albu.RandomBrightness(p=0.2, limit=0.1),
                 albu.Resize(imsize, imsize),
-                albu.Normalize(always_apply=True, mean=[0.8503, 0.6942, 0.7927], std=[0.1519, 0.2637, 0.1792]),
+                albu.Normalize(always_apply=True, mean=[0.81, 0.6, 0.73], std=[0.4, 0.51, 0.41]),
                 ToTensorV2()
             ],
             additional_targets={f'image{i}':'image' for i in range(n_patches-1)} if is_stack else None)
     else:
         return albu.Compose([
             albu.Resize(imsize, imsize),
-            albu.Normalize(always_apply=True, mean=[0.8503, 0.6942, 0.7927], std=[0.1519, 0.2637, 0.1792]),
+            albu.Normalize(always_apply=True, mean=[0.81, 0.6, 0.73], std=[0.4, 0.51, 0.41]),
             ToTensorV2()
         ])
 
@@ -81,6 +81,7 @@ class PandaDatasetStack(torch.utils.data.Dataset):
         # Stack patches: #Do this before or after augmentation? Some augmentations before and some after: global ones like brightness and contrast after, local before: crop resize
         if len(df_row.patches) < self.n_patches:
             frames = df_row.patches + list(np.random.choice(df_row.patches, self.n_patches-len(df_row.patches), replace=True))
+            random.shuffle(frames)
         else:
             frames = np.random.choice(df_row.patches, self.n_patches, replace=False)
 
@@ -126,6 +127,7 @@ class PandaDatasetConcat(torch.utils.data.Dataset):
         # Stack patches: #Do this before or after augmentation? Some augmentations before and some after: global ones like brightness and contrast after, local before: crop resize
         if len(df_row.patches) < self.n_patches:
             frames = df_row.patches + list(np.random.choice(df_row.patches, self.n_patches-len(df_row.patches), replace=True))
+            random.shuffle(frames)
         else:
             frames = np.random.choice(df_row.patches, self.n_patches, replace=False)
 
