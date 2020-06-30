@@ -9,6 +9,7 @@ import numpy as np
 from pytorch_lightning.callbacks import ModelCheckpoint
 from functools import partial
 from torch.utils.data import DataLoader
+import multiprocessing as mp
 
 from dataset import PandaDatasetStack, PandaDatasetConcat, get_transforms
 from metrics import quadratic_kappa, accuracy
@@ -125,13 +126,13 @@ class BaselineModel(pl.LightningModule):
         DS = PandaDatasetStack if self.is_stack else PandaDatasetConcat
         return DataLoader(DS(self.path, patch_size=self.imsize, n_patches=self.n_patches,
                             ordinal=self.ordinal, norm_target=self.norm_output),
-                          batch_size=self.bs, num_workers=7, shuffle=True, pin_memory=True)
+                          batch_size=self.bs, num_workers=mp.cpu_count()-1, shuffle=True, pin_memory=True)
 
     def val_dataloader(self):
         DS = PandaDatasetStack if self.is_stack else PandaDatasetConcat
         return DataLoader(DS(self.path, patch_size=self.imsize, n_patches=self.n_patches,
                             train=False, ordinal=self.ordinal, norm_target=self.norm_output),
-                          batch_size=self.bs*4, num_workers=7, pin_memory=True)
+                          batch_size=self.bs*4, num_workers=mp.cpu_count()-1, pin_memory=True)
 
 
 def set_grad(m, grad):
@@ -144,10 +145,18 @@ def set_grad(m, grad):
 
 # TODO: add cli
 if __name__ == '__main__':
-    path = Path('/path/to/data')
+    import argparse
 
-    model = BaselineModel(path, bs=14, lr=3e-4, imsize=128, n_patches=64,
-                        reg=True, is_stack=False, epochs=5, norm_output=False, ordinal=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('path', default='data/naive256x36/', nargs='?')
+    parser.add_argument('-b', type=int, help='Batch Size', default=8)
+    parser.add_argument('--restore')
+    args = parser.parse_args()
+
+    path = Path(args.path)
+
+    model = BaselineModel(path, bs=args.b, lr=3e-4, imsize=224, n_patches=36,
+                reg=True, is_stack=False, epochs=5, norm_output=False, ordinal=True)
     # model = BaselineModel.load_from_checkpoint('./TableLogger/version_15/epoch=13.ckpt', map_location='cuda:0',
     #                                           path=path, bs=14, imsize=200, lr=1e-3, n_patches=22, reg=True, is_stack=False)
 
@@ -161,23 +170,32 @@ if __name__ == '__main__':
             prefix=''
     )
 
+    kwargs = {
+        'train_percent_check': 1.0,
+        'accumulate_grad_batches': 2,
+        'val_percent_check': 1.0,
+        'gpus': 1,
+        'weights_summary':'top',
+        'precision': 16,
+        'logger': logger,
+        'checkpoint_callback': checkpoint_callback,
+    }
 
-    # Train head and batchnorm layers
-    model.model.m.apply(partial(set_grad, grad=False))
-    trainer = pl.Trainer(max_epochs=5, logger=logger, accumulate_grad_batches=1,
-                        checkpoint_callback=checkpoint_callback, train_percent_check=1.0,
-                        val_percent_check=1.0, gpus=1, weights_summary='top', precision=16)
-    trainer.fit(model)
+    if args.restore is None:
+        # Train head and batchnorm layers
+        model.model.m.apply(partial(set_grad, grad=False))
+        trainer = pl.Trainer(max_epochs=1, **kwargs)
+        trainer.fit(model)
 
-    # Train full network
-    model.model.m.apply(partial(set_grad, grad=True))
-    model.epochs = 30
-    # model.lr = model.lr/5.
-    trainer = pl.Trainer(max_epochs=30, logger=logger, accumulate_grad_batches=1,
-                        checkpoint_callback=checkpoint_callback,
-                        train_percent_check=1.0, val_percent_check=1.0,
-                        gpus=1, weights_summary='top', precision=16)
-    trainer.fit(model)
+        # Train full network
+        model.model.m.apply(partial(set_grad, grad=True))
+        model.epochs = 30
+        # model.lr = model.lr/5.
+        trainer = pl.Trainer(max_epochs=30, **kwargs)
+
+    else:
+        trainer = pl.Trainer(resume_from_checkpoint=args.restore, **kwargs)
+        trainer.fit(model)
 
     # Save final checkpoint
     trainer.save_checkpoint('final.ckpt')
