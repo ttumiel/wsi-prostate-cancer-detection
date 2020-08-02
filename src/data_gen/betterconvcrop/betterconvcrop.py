@@ -92,7 +92,11 @@ def sliceRect(input_slide, rect):
     return output_slide
 
 def getContourRect(im):
-    mask = segment(process_image(im)).numpy().astype('uint8')
+    h,w,_ = im.shape
+    sh,sw = (int(w/3), int(h/3)) if h>3000 else (h,w)
+    im_small = np.asarray(Image.fromarray(im).resize((sh,sw)))
+    mask = (segment(process_image(im_small)).numpy()*255).astype('uint8')
+    mask = np.asarray(Image.fromarray(mask).resize((w,h)))
     c,h = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     rect = cv2.minAreaRect(np.concatenate(c))
     return sliceRect(im, rect)
@@ -113,10 +117,6 @@ def count_empty(arr, empty_val=245, thresh=0.8):
 
 def patch_image(im_id, patch_fn, save_ims=False, save_path='./data', level=2):
     base_im = open_image(path/f'train_images/{im_id}.tiff', level=level)
-    if max(base_im.shape[:2]) > 3*1450*(1 if level == 2 else 4 if level == 1 else 16): # reduce size of input
-        base_im = np.asarray(Image.fromarray(base_im).resize((base_im.shape[1]//2, base_im.shape[0]//2), Image.BILINEAR))
-        print("overlarge input, shrinking")
-
     objs = separate_objects_in_image(base_im)
 
     ims = []
@@ -193,7 +193,7 @@ def from_sliding_window(im, patch_size=128, overlap=20, return_coords=False, ret
 
 
 if __name__ == '__main__':
-    # mkdir -p ./data/conv_crop
+    # mkdir -p ./data/images
     path = Path('../input/prostate-cancer-grade-assessment/')
     df = pd.read_csv(path/'train.csv')
     df = df[df.image_id != '3790f55cad63053e956fb73027179707']
@@ -203,17 +203,17 @@ if __name__ == '__main__':
     OVERLAP = 0
     WIDTH_THRESH = 0.7
 
-    im_ids = []
+    patches = []
     isups = []
     ns = []
     for im_id,isup in tqdm(zip(df.image_id,df.isup_grade), total=len(df.image_id)):
-        outs = patch_image(im_id, partial(from_sliding_window,patch_size=SIZE, width_thresh=WIDTH_THRESH, overlap=OVERLAP), level=1, save_ims=True, save_path='./data/conv_crop')
+        outs = patch_image(im_id, partial(from_sliding_window,patch_size=SIZE, width_thresh=WIDTH_THRESH, overlap=OVERLAP), level=1, save_ims=True, save_path='./data/images')
         ns.append((len(outs)))
-        im_ids.extend(outs)
+        patches.append(outs)
         isups.extend([isup]*len(outs))
 
-
-    pd.DataFrame({'image_id': im_ids, 'isup_grade': isups}).to_csv('./data/conv_crop/train.csv', index=False)
+    df['patches'] = patches
+    df.to_json('data/train.json')
 
     ns = np.array(ns)
     print(ns.min(), ns.max(), ns.mean(), ns.std())
