@@ -5,6 +5,7 @@ from IPython.display import DisplayHandle
 import numpy as np
 import re
 from pathlib import Path
+import yaml
 
 
 class TableLogger(LightningLoggerBase):
@@ -35,8 +36,8 @@ class TableLogger(LightningLoggerBase):
 
     @rank_zero_only
     def log_hyperparams(self, params):
-        with open(self.path/'hparams.txt', 'w') as f:
-            print(params, file=f)
+        with open(self.path/'hparams.yaml', 'w') as f:
+            yaml.dump(params, f)
 
     @rank_zero_only
     def log_metrics(self, metrics, step):
