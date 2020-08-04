@@ -11,3 +11,6 @@ version*
 *.dat
 MNIST
 *.zip
+*.txt
+__pycache__/
+*.part
